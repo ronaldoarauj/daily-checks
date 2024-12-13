@@ -4,6 +4,16 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../utils/supabaseClient';
 import './TodoList.css';
 
+const fixedTodos = [
+  { text: "Perguntas Biblicas", completed: false },
+  { text: "Imagens do app", completed: false },
+  { text: "Instagram", completed: false },
+  { text: "Melhorias no app", completed: false },
+  { text: "Desenvolver algo novo", completed: false },
+  { text: "Ações", completed: false },
+  { text: "Estudar(video aula)", completed: false },
+];
+
 export default function TodoList() {
   const [todos, setTodos] = useState([]);
   const [newTodo, setNewTodo] = useState("");
@@ -13,11 +23,36 @@ export default function TodoList() {
   }, []);
 
   const fetchTodos = async () => {
-    const { data, error } = await supabase.from('todos').select().order('created_at', { ascending: false });
+    const { data, error } = await supabase
+      .from('todos')
+      .select()
+      .order('completed', { ascending: true })
+      .limit(20);
+
     if (error) {
       console.error("Error fetching todos:", error);
     } else {
       setTodos(data);
+      await addFixedTodosIfNeeded(data);
+    }
+  };
+
+  const addFixedTodosIfNeeded = async (existingTodos) => {
+    const today = new Date().toISOString().split('T')[0];
+    const todayTodos = existingTodos.filter(todo => todo.created_at.split('T')[0] === today);
+
+    if (todayTodos.length < fixedTodos.length) {
+      const remainingTodos = fixedTodos.slice(todayTodos.length);
+      const { data, error } = await supabase
+        .from('todos')
+        .insert(remainingTodos)
+        .select();
+        
+      if (error) {
+        console.error("Error adding fixed todos:", error);
+      } else {
+        setTodos([...existingTodos, ...data]);
+      }
     }
   };
 
@@ -26,9 +61,10 @@ export default function TodoList() {
       const { data, error } = await supabase
         .from('todos')
         .insert([{ text: newTodo, completed: false }])
+        .select()
         .single();
       if (error) {
-        console.error("Error adding todo:", error);
+        console.error("Error adding todo:", error.message, error.details, error.hint);
       } else {
         setTodos([data, ...todos]);
         setNewTodo("");
@@ -42,6 +78,7 @@ export default function TodoList() {
       .from('todos')
       .update({ completed: !todo.completed })
       .eq('id', todo.id)
+      .select()
       .single();
     if (error) {
       console.error("Error toggling todo:", error);
@@ -53,13 +90,16 @@ export default function TodoList() {
   };
 
   return (
-    <div>
-      <input 
-        type="text" 
-        value={newTodo} 
-        onChange={(e) => setNewTodo(e.target.value)} 
-      />
-      <button onClick={addTodo}>Add Todo</button>
+    <div className="container">
+      <div className="input-group">
+        <input 
+          type="text" 
+          value={newTodo} 
+          onChange={(e) => setNewTodo(e.target.value)} 
+          placeholder="Adicionar atividades"
+        />
+        <button onClick={addTodo}>Add</button>
+      </div>
       <ul>
         {todos.map((todo, index) => (
           <li 
@@ -67,7 +107,8 @@ export default function TodoList() {
             onClick={() => toggleTodo(index)} 
             className={todo.completed ? "completed" : ""}
           >
-            {todo.text} <span className="created-at">{new Date(todo.created_at).toLocaleString()}</span>
+            <span className="task-text">{todo.text}</span>
+            <span className="created-at">{new Date(todo.created_at).toLocaleString()}</span>
           </li>
         ))}
       </ul>
